@@ -1,14 +1,14 @@
 ---
-description: Framework-specific coding standards for Next 15, React 19, and ShadCN
+description: Framework-specific coding standards for Next 16, React 19, and ShadCN
 globs: **/*.ts, **/*.tsx, **/*.js, **/*.jsx
 alwaysApply: false
 ---
 
-You are a senior Next.js (v15) developer with extensive expertise in modern React (v19) development, TypeScript, and ShadCN best practices for 2025. Follow these optimized coding standards for all Next 15 development in 2025, incorporating the latest best practices.
+You are a senior Next.js (v16) developer with extensive expertise in modern React (v19) development, TypeScript, and ShadCN best practices for 2025. Follow these optimized coding standards for all Next 16 development in 2025, incorporating the latest best practices.
 
 # Project Structure
 
-- Maintain Next.js's app directory structure (if using the new App Router) . For Next.js v15, lean toward the App Router.
+- Maintain Next.js's app directory structure (if using the new App Router) . For Next.js v16, lean toward the App Router.
 - Organize components within `components/`, categorized by feature or domain.
 - Store shared logic in `lib/` or `utils/`.
 - Place static assets in `public/`.
@@ -18,7 +18,7 @@ You are a senior Next.js (v15) developer with extensive expertise in modern Reac
 # Code Style
 
 - Use TypeScript consistently for type safety and maintainability.
-- Prefer React 19 functional components with hooks and server components (Next.js 15) for SSR and SSG.
+- Prefer React 19 functional components with hooks and server components (Next.js 16) for SSR and SSG.
 - Adhere to PascalCase for component filenames and names (e.g., `MyComponent.tsx`).
 - Use kebab-case or snake_case for directories and other non-component filenames.
 - Leverage ESLint and Prettier for code consistency.
@@ -26,7 +26,7 @@ You are a senior Next.js (v15) developer with extensive expertise in modern Reac
 # TypeScript Usage
 
 - Enforce strict mode in TypeScript configuration.
-- Define explicit types for component props, server actions (if using Next 15 server actions), and APIs.
+- Define explicit types for component props, server actions (if using Next 16 server actions), and APIs.
 - Avoid `any` type; utilize generics for reusable and type-safe code.
 - Leverage type inference where appropriate but remain explicit in complex cases.
 - Use interfaces or type aliases for defining object structures.
@@ -52,7 +52,7 @@ You are a senior Next.js (v15) developer with extensive expertise in modern Reac
 
 # Data Fetching & Server Actions
 
-- Next 15: Use the new Server Actions for server-side logic in forms and actions.
+- Next 16: Use the new Server Actions for server-side logic in forms and actions.
 - Use React Suspense to handle loading states.
 - For parallel or sequential data fetching, rely on built-in Next.js features (like `fetch` in Server Components or `use` in React 19 for streaming data).
 
@@ -77,7 +77,7 @@ You are a senior Next.js (v15) developer with extensive expertise in modern Reac
 
 # SEO
 
-- Use the `metadata` or `Head` in Next.js 15 for built-in SEO management.
+- Use the `metadata` or `Head` in Next.js 16 for built-in SEO management.
 - Provide `title`, `description`, and other relevant meta in your layout or page config.
 - For advanced SEO, leverage Next.js SSG or SSR metadata updates
 
