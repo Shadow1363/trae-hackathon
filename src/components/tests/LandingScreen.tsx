@@ -89,9 +89,6 @@ export default function LandingScreen() {
       </div>
 
       <div className="space-y-4">
-        <h1 className="text-3xl font-bold text-zinc-900">
-          {t[language].title}
-        </h1>
         <p className="text-zinc-600 max-w-md mx-auto leading-relaxed">
           {t[language].description}
         </p>

@@ -15,6 +15,103 @@ export default function ResultsScreen() {
   const language = useVisionStore((s) => s.language);
   const state = useVisionStore();
 
+  type ChartBar = { label: string; value: number; color?: string };
+
+  const copy = {
+    en: {
+      detailsTitle: "Your Test Details",
+      acuityChartTitle: "Acuity by Eye",
+      scoresChartTitle: "Your Test Scores",
+      answersTitle: "Your Answers",
+      answersStrain: "Eye strain questionnaire: {yes} yes out of {total}",
+      metrics: {
+        acuity: "Distance acuity",
+        contrast: "Contrast sensitivity",
+        strain: "Eye strain",
+        amsler: "Amsler grid",
+      },
+      labels: {
+        leftWithout: "Left (no glasses)",
+        rightWithout: "Right (no glasses)",
+        leftWith: "Left (with glasses)",
+        rightWith: "Right (with glasses)",
+      },
+      values: {
+        notTaken: "Not taken",
+        yes: "Yes",
+        no: "No",
+        ok: "OK",
+        distorted: "Distorted",
+      },
+      findingsTitle: "Specific Findings",
+      findings: {
+        amslerDistorted:
+          "Amsler grid distortion detected. Seek an eye care professional promptly.",
+        acuityLow:
+          "Distance clarity looks reduced on at least one eye in this screening.",
+        acuityDiff:
+          "There is a noticeable left/right difference in distance clarity.",
+        astig:
+          "You reported uneven lines on the astigmatism screen, which can be consistent with astigmatism.",
+        contrastLow:
+          "Contrast sensitivity looks reduced (difficulty with fainter letters).",
+        strainHigh:
+          "Your answers suggest elevated eye strain symptoms from screens.",
+        glassesHelp:
+          "Your results look better with glasses/contacts than without.",
+      },
+    },
+    pt: {
+      detailsTitle: "Detalhes dos Seus Testes",
+      acuityChartTitle: "Acuidade por Olho",
+      scoresChartTitle: "Seus Escores",
+      answersTitle: "Suas Respostas",
+      answersStrain: "Questionário de cansaço ocular: {yes} “sim” de {total}",
+      metrics: {
+        acuity: "Acuidade à distância",
+        contrast: "Sensibilidade ao contraste",
+        strain: "Cansaço ocular",
+        amsler: "Grade de Amsler",
+      },
+      labels: {
+        leftWithout: "Esquerdo (sem óculos)",
+        rightWithout: "Direito (sem óculos)",
+        leftWith: "Esquerdo (com óculos)",
+        rightWith: "Direito (com óculos)",
+      },
+      values: {
+        notTaken: "Não realizado",
+        yes: "Sim",
+        no: "Não",
+        ok: "OK",
+        distorted: "Distorcido",
+      },
+      findingsTitle: "Achados Específicos",
+      findings: {
+        amslerDistorted:
+          "Distorção na grade de Amsler. Procure um profissional de saúde ocular com prioridade.",
+        acuityLow:
+          "A nitidez à distância parece reduzida em pelo menos um olho nesta triagem.",
+        acuityDiff:
+          "Há uma diferença perceptível entre olho esquerdo e direito na nitidez à distância.",
+        astig:
+          "Você relatou linhas irregulares no teste de astigmatismo, o que pode ser compatível com astigmatismo.",
+        contrastLow:
+          "A sensibilidade ao contraste parece reduzida (dificuldade com letras mais fracas).",
+        strainHigh:
+          "Suas respostas sugerem sintomas elevados de cansaço ocular por telas.",
+        glassesHelp:
+          "Seus resultados parecem melhores com óculos/lentes do que sem.",
+      },
+    },
+  } as const;
+
+  const format = (template: string, params: Record<string, string | number>) =>
+    Object.entries(params).reduce(
+      (acc, [k, v]) => acc.replace(new RegExp(`\\{${k}\\}`, "g"), String(v)),
+      template,
+    );
+
   // Logic Analysis
   let urgencyLevel: "Normal" | "Monitor" | "Attention" | "Urgent" = "Normal";
   const detectedIssues: string[] = [];
@@ -25,6 +122,12 @@ export default function ResultsScreen() {
     urgencyLevel = "Urgent";
     detectedIssues.push(t(language, "results.issues.retinal"));
   }
+
+  const totalAcuityLines = 8;
+  const toPercent = (n: number, max: number) =>
+    Math.max(0, Math.min(100, Math.round((n / max) * 100)));
+  const acuityPercent = (line: number | null) =>
+    line == null ? 0 : toPercent(line + 1, totalAcuityLines);
 
   // 2. Acuity Check
   const leftMax = Math.max(
@@ -77,6 +180,9 @@ export default function ResultsScreen() {
       "Blink regularly and stay hydrated to prevent dry eyes.",
     );
   }
+
+  const strainYes = state.strainScore ?? null;
+  const strainTotal = 4;
 
   const primaryMessage =
     urgencyLevel === "Normal"
@@ -137,6 +243,86 @@ export default function ResultsScreen() {
       color: "#16a34a",
     },
   ];
+
+  const acuityBars: ChartBar[] = [
+    {
+      label: copy[language].labels.leftWithout,
+      value: acuityPercent(state.acuityLeftWithout),
+      color: "#2563eb",
+    },
+    {
+      label: copy[language].labels.rightWithout,
+      value: acuityPercent(state.acuityRightWithout),
+      color: "#f59e0b",
+    },
+  ];
+  if (state.wearsGlasses) {
+    acuityBars.push(
+      {
+        label: copy[language].labels.leftWith,
+        value: acuityPercent(state.acuityLeftWith),
+        color: "#16a34a",
+      },
+      {
+        label: copy[language].labels.rightWith,
+        value: acuityPercent(state.acuityRightWith),
+        color: "#ef4444",
+      },
+    );
+  }
+
+  const contrastPercent = toPercent((state.contrastSensitivity ?? 0) + 1, 6);
+  const strainPercent =
+    strainYes == null ? 0 : toPercent(strainYes, strainTotal);
+  const amslerPercent = state.amslerDistorted ? 0 : 100;
+  const scoreBars: ChartBar[] = [
+    {
+      label: copy[language].metrics.acuity,
+      value: toPercent(
+        Math.max(leftMaxScore, rightMaxScore) + 1,
+        totalAcuityLines,
+      ),
+      color: "#2563eb",
+    },
+    {
+      label: copy[language].metrics.contrast,
+      value: contrastPercent,
+      color: "#f59e0b",
+    },
+    {
+      label: copy[language].metrics.strain,
+      value: 100 - strainPercent,
+      color: "#16a34a",
+    },
+    {
+      label: copy[language].metrics.amsler,
+      value: amslerPercent,
+      color: "#ef4444",
+    },
+  ];
+
+  const specificFindings: string[] = [];
+  if (state.amslerDistorted)
+    specificFindings.push(copy[language].findings.amslerDistorted);
+  if (leftMax < 5 || rightMax < 5)
+    specificFindings.push(copy[language].findings.acuityLow);
+  if (Math.abs(leftMax - rightMax) >= 2)
+    specificFindings.push(copy[language].findings.acuityDiff);
+  if (state.astigmatism) specificFindings.push(copy[language].findings.astig);
+  if ((state.contrastSensitivity ?? 0) < 3)
+    specificFindings.push(copy[language].findings.contrastLow);
+  if (strainLevel === "High")
+    specificFindings.push(copy[language].findings.strainHigh);
+  if (state.wearsGlasses) {
+    const leftWithout = state.acuityLeftWithout ?? null;
+    const leftWith = state.acuityLeftWith ?? null;
+    const rightWithout = state.acuityRightWithout ?? null;
+    const rightWith = state.acuityRightWith ?? null;
+    const improved =
+      (leftWith != null && leftWithout != null && leftWith > leftWithout) ||
+      (rightWith != null && rightWithout != null && rightWith > rightWithout);
+    if (improved) specificFindings.push(copy[language].findings.glassesHelp);
+  }
 
   const renderUrgencyBadge = () => {
     switch (urgencyLevel) {
@@ -217,6 +403,11 @@ export default function ResultsScreen() {
         data={riskData}
       />
 
+      <AgeVisionChart
+        title={copy[language].scoresChartTitle}
+        data={scoreBars}
+      />
+
       {group && (
         <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
           <h3 className="text-lg font-bold text-zinc-900 mb-2">
@@ -232,6 +423,79 @@ export default function ResultsScreen() {
       )}
 
       {renderUrgencyBadge()}
+
+      <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
+        <h3 className="text-lg font-bold text-zinc-900 mb-4">
+          {copy[language].detailsTitle}
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-zinc-700">
+          <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4">
+            <div className="font-semibold text-zinc-900 mb-1">
+              {copy[language].metrics.amsler}
+            </div>
+            <div>
+              {state.amslerDistorted == null
+                ? copy[language].values.notTaken
+                : state.amslerDistorted
+                  ? copy[language].values.distorted
+                  : copy[language].values.ok}
+            </div>
+          </div>
+          <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4">
+            <div className="font-semibold text-zinc-900 mb-1">
+              {t(language, "results.strain_label", {
+                level: strainLevelLabel(language, strainLevel),
+              })}
+            </div>
+            <div>
+              {strainYes == null
+                ? copy[language].values.notTaken
+                : format(copy[language].answersStrain, {
+                    yes: strainYes,
+                    total: strainTotal,
+                  })}
+            </div>
+          </div>
+          <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4">
+            <div className="font-semibold text-zinc-900 mb-1">
+              {t(language, "results.issues.astigmatism")}
+            </div>
+            <div>
+              {state.astigmatism == null
+                ? copy[language].values.notTaken
+                : state.astigmatism
+                  ? copy[language].values.yes
+                  : copy[language].values.no}
+            </div>
+          </div>
+          <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4">
+            <div className="font-semibold text-zinc-900 mb-1">
+              {t(language, "results.issues.contrast")}
+            </div>
+            <div>
+              {state.contrastSensitivity == null
+                ? copy[language].values.notTaken
+                : `${state.contrastSensitivity + 1}/6`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {specificFindings.length > 0 && (
+        <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
+          <h3 className="text-lg font-bold text-zinc-900 mb-4">
+            {copy[language].findingsTitle}
+          </h3>
+          <ul className="space-y-2">
+            {specificFindings.map((f, idx) => (
+              <li key={idx} className="flex items-start gap-3 text-zinc-700">
+                <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 mt-2" />
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {detectedIssues.length > 0 && (
         <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
