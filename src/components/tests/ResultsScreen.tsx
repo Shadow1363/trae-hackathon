@@ -59,7 +59,7 @@ export default function ResultsScreen() {
 
   // 5. Eye Strain
   const strain = state.strainScore ?? 0;
-  let strainLevel = "Low";
+  let strainLevel: "Low" | "Medium" | "High" = "Low";
   if (strain === 2) {
     strainLevel = "Medium";
     if (urgencyLevel === "Normal") urgencyLevel = "Monitor";
@@ -95,8 +95,14 @@ export default function ResultsScreen() {
             ? "mature"
             : "senior";
 
-  const leftMaxScore = Math.max(state.acuityLeftWithout ?? 0, state.acuityLeftWith ?? 0);
-  const rightMaxScore = Math.max(state.acuityRightWithout ?? 0, state.acuityRightWith ?? 0);
+  const leftMaxScore = Math.max(
+    state.acuityLeftWithout ?? 0,
+    state.acuityLeftWith ?? 0,
+  );
+  const rightMaxScore = Math.max(
+    state.acuityRightWithout ?? 0,
+    state.acuityRightWith ?? 0,
+  );
   const distanceLow = leftMaxScore < 5 || rightMaxScore < 5;
 
   const myopiaBase =
@@ -115,9 +121,21 @@ export default function ResultsScreen() {
 
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
   const riskData = [
-    { label: t(language, "results.risk_labels.myopia"), value: clamp(myopiaBase), color: "#2563eb" },
-    { label: t(language, "results.risk_labels.astigmatism"), value: clamp(astigBase), color: "#f59e0b" },
-    { label: t(language, "results.risk_labels.presbyopia"), value: clamp(presbyopiaBase), color: "#16a34a" },
+    {
+      label: t(language, "results.risk_labels.myopia"),
+      value: clamp(myopiaBase),
+      color: "#2563eb",
+    },
+    {
+      label: t(language, "results.risk_labels.astigmatism"),
+      value: clamp(astigBase),
+      color: "#f59e0b",
+    },
+    {
+      label: t(language, "results.risk_labels.presbyopia"),
+      value: clamp(presbyopiaBase),
+      color: "#16a34a",
+    },
   ];
 
   const renderUrgencyBadge = () => {
@@ -194,7 +212,10 @@ export default function ResultsScreen() {
         <p className="text-xl text-zinc-700 font-medium">{primaryMessage}</p>
       </div>
 
-      <AgeVisionChart title={t(language, "results.risk_section")} data={riskData} />
+      <AgeVisionChart
+        title={t(language, "results.risk_section")}
+        data={riskData}
+      />
 
       {group && (
         <div className="bg-white border border-zinc-200 rounded-xl p-6 shadow-sm">
@@ -227,7 +248,7 @@ export default function ResultsScreen() {
             <li className="flex items-center gap-2 text-zinc-700">
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
               {t(language, "results.strain_label", {
-                level: strainLevelLabel(language, strainLevel as any),
+                level: strainLevelLabel(language, strainLevel),
               })}
             </li>
           </ul>

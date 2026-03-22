@@ -96,7 +96,11 @@ const translations = {
         strain_high: "High eye strain level",
       },
       risk_section: "Risk Profile by Condition",
-      risk_labels: { myopia: "Myopia", astigmatism: "Astigmatism", presbyopia: "Presbyopia" },
+      risk_labels: {
+        myopia: "Myopia",
+        astigmatism: "Astigmatism",
+        presbyopia: "Presbyopia",
+      },
       age_insights_title: "Age-Based Insights",
       age_groups: {
         child: "Children (0–12)",
@@ -107,8 +111,7 @@ const translations = {
       age_insights: {
         child:
           "In childhood, refractive errors are common. Regular screenings help detect myopia/astigmatism early.",
-        teen:
-          "Under 40, screen use can drive myopia progression. Maintain healthy visual habits and regular checks.",
+        teen: "Under 40, screen use can drive myopia progression. Maintain healthy visual habits and regular checks.",
         mature:
           "After 40, presbyopia emerges universally. Reading aid and balanced lighting improve near vision.",
         senior:
@@ -172,8 +175,7 @@ const translations = {
     },
     results: {
       title: "Seus Resultados",
-      primary_normal:
-        "Sua visão parece estável com base nesta triagem.",
+      primary_normal: "Sua visão parece estável com base nesta triagem.",
       primary_changed:
         "Seus resultados sugerem que sua visão pode ter mudado desde sua última avaliação.",
       urgency: {
@@ -214,7 +216,11 @@ const translations = {
         strain_high: "Alto nível de cansaço ocular",
       },
       risk_section: "Perfil de Risco por Condição",
-      risk_labels: { myopia: "Miopia", astigmatism: "Astigmatismo", presbyopia: "Presbiopia" },
+      risk_labels: {
+        myopia: "Miopia",
+        astigmatism: "Astigmatismo",
+        presbyopia: "Presbiopia",
+      },
       age_insights_title: "Insights por Idade",
       age_groups: {
         child: "Crianças (0–12)",
@@ -225,8 +231,7 @@ const translations = {
       age_insights: {
         child:
           "Na infância, erros refrativos são comuns. Triagens regulares ajudam a detectar miopia/astigmatismo cedo.",
-        teen:
-          "Abaixo de 40, o uso de telas pode favorecer a progressão da miopia. Mantenha hábitos visuais saudáveis.",
+        teen: "Abaixo de 40, o uso de telas pode favorecer a progressão da miopia. Mantenha hábitos visuais saudáveis.",
         mature:
           "Após os 40, a presbiopia é universal. Óculos para leitura e iluminação adequada melhoram a visão de perto.",
         senior:
@@ -236,12 +241,20 @@ const translations = {
   },
 } as const;
 
-export function t(lang: Lang, key: string, params?: Record<string, string | number>) {
+export function t(
+  lang: Lang,
+  key: string,
+  params?: Record<string, string | number>,
+) {
   const parts = key.split(".");
-  let cur: any = translations[lang];
+  let cur: unknown = translations[lang];
   for (const p of parts) {
     if (cur == null) break;
-    cur = cur[p];
+    if (typeof cur !== "object" || cur == null) {
+      cur = undefined;
+      break;
+    }
+    cur = (cur as Record<string, unknown>)[p];
   }
   let str = typeof cur === "string" ? cur : "";
   if (params && str) {

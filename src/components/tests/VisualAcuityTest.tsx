@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useVisionStore, Step } from "@/store/useVisionStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff } from "lucide-react";
@@ -29,7 +29,8 @@ const generateRandomLines = () => {
         (letter) => letter !== lastLetter,
       );
       const randomIndex = Math.floor(Math.random() * availableLetters.length);
-      const chosenLetter = availableLetters[randomIndex];
+      const chosenLetter =
+        availableLetters[randomIndex] ?? SNELLEN_LETTERS[0] ?? "E";
 
       text += chosenLetter + (i < count - 1 ? " " : "");
       lastLetter = chosenLetter;
@@ -39,13 +40,18 @@ const generateRandomLines = () => {
 };
 
 let globalAudioCtx: AudioContext | null = null;
+const getAudioContextCtor = () => {
+  const w = window as Window & { webkitAudioContext?: typeof AudioContext };
+  return window.AudioContext ?? w.webkitAudioContext;
+};
+
 const playBeep = (
   freq = 440,
   duration = 0.1,
   type: OscillatorType = "sine",
 ) => {
   try {
-    const Context = window.AudioContext || (window as any).webkitAudioContext;
+    const Context = getAudioContextCtor();
     if (!Context) return;
     if (!globalAudioCtx) {
       globalAudioCtx = new Context();
@@ -82,6 +88,36 @@ const playSuccessSound = () => {
   setTimeout(() => playBeep(800, 0.2, "sine"), 100);
 };
 
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: unknown) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort?: () => void;
+};
+
+type SpeechRecognitionAlternativeLike = { transcript?: string };
+type SpeechRecognitionResultLike = {
+  [alternativeIndex: number]: SpeechRecognitionAlternativeLike;
+};
+type SpeechRecognitionResultListLike = {
+  length: number;
+  [resultIndex: number]: SpeechRecognitionResultLike | undefined;
+};
+type SpeechRecognitionEventLike = { results: SpeechRecognitionResultListLike };
+
+const getSpeechRecognitionCtor = () => {
+  const w = window as Window & {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+};
+
 export default function VisualAcuityTest() {
   const { currentStep, wearsGlasses, setStep, setAcuity, language } =
     useVisionStore();
@@ -90,28 +126,97 @@ export default function VisualAcuityTest() {
   const [testState, setTestState] = useState<
     "hidden" | "countdown" | "showing"
   >("hidden");
-  const [snellenLines, setSnellenLines] = useState(generateRandomLines());
+  const [snellenLines, setSnellenLines] = useState(() => generateRandomLines());
   const [countdown, setCountdown] = useState(10);
   const [spokenText, setSpokenText] = useState("");
   const [isListening, setIsListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
+  const [speechSupported] = useState(() =>
+    typeof window !== "undefined" ? !!getSpeechRecognitionCtor() : true,
+  );
   const [speechErrorMsg, setSpeechErrorMsg] = useState<string | null>(null);
 
   // Reference to hold the reset timeout
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const responseLockedRef = useRef(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionRunningRef = useRef(false);
+  const shouldListenRef = useRef(false);
+  const currentLineRef = useRef(currentLine);
+  const snellenLinesRef = useRef(snellenLines);
+  const testStateRef = useRef(testState);
+  const speechErrorMsgRef = useRef(speechErrorMsg);
+  const languageRef = useRef(language);
+  const currentStepRef = useRef(currentStep);
 
   // Determine current context based on step
   const isLeftEye = currentStep.includes("left");
   const isWithGlasses = currentStep.includes("_with");
 
+  const handleResponse = useCallback(
+    (canRead: boolean) => {
+      if (responseLockedRef.current) return;
+      responseLockedRef.current = true;
+      setTimeout(() => {
+        responseLockedRef.current = false;
+      }, 800);
+
+      const lineIndex = currentLineRef.current;
+      const totalLines = snellenLinesRef.current.length;
+      if (!canRead || lineIndex >= totalLines - 1) {
+        const finalLine = canRead ? lineIndex : Math.max(0, lineIndex - 1);
+
+        const step = currentStepRef.current;
+        const eye = step.includes("left") ? "left" : "right";
+        const condition = step.includes("_with") ? "with" : "without";
+        setAcuity(eye, condition, finalLine);
+
+        let nextStep: Step = "astigmatism";
+
+        if (step === "acuity_left_without") {
+          nextStep = "acuity_right_without";
+        } else if (step === "acuity_right_without") {
+          nextStep = wearsGlasses ? "acuity_left_with" : "astigmatism";
+        } else if (step === "acuity_left_with") {
+          nextStep = "acuity_right_with";
+        } else if (step === "acuity_right_with") {
+          nextStep = "astigmatism";
+        }
+
+        setStep(nextStep);
+        setCurrentLine(0);
+        setTestState("hidden");
+        setSpokenText("");
+      } else {
+        setCurrentLine((prev) => prev + 1);
+        setSpokenText("");
+      }
+    },
+    [setAcuity, setStep, wearsGlasses],
+  );
+
   useEffect(() => {
-    setSpeechSupported(
-      !!(
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition
-      ),
-    );
-  }, []);
+    currentLineRef.current = currentLine;
+  }, [currentLine]);
+
+  useEffect(() => {
+    snellenLinesRef.current = snellenLines;
+  }, [snellenLines]);
+
+  useEffect(() => {
+    testStateRef.current = testState;
+  }, [testState]);
+
+  useEffect(() => {
+    speechErrorMsgRef.current = speechErrorMsg;
+  }, [speechErrorMsg]);
+
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
+  useEffect(() => {
+    currentStepRef.current = currentStep;
+  }, [currentStep]);
 
   useEffect(() => {
     if (testState === "countdown") {
@@ -121,24 +226,29 @@ export default function VisualAcuityTest() {
         return () => clearTimeout(timer);
       } else {
         playBeep(880, 0.3); // higher beep for start
-        setTestState("showing");
+        const timer = setTimeout(() => setTestState("showing"), 0);
+        return () => clearTimeout(timer);
       }
     }
   }, [testState, countdown]);
 
   useEffect(() => {
-    if (testState !== "showing" || !speechSupported) return;
+    if (!speechSupported) return;
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+    const SpeechRecognitionCtor = getSpeechRecognitionCtor();
+    if (!SpeechRecognitionCtor) return;
+
+    const stripDiacritics = (s: string) =>
+      s
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
 
     const normalizeTranscriptInput = (
       transcript: string,
       lang: "en" | "pt",
     ) => {
-      const tokens = transcript.toLowerCase().match(/[a-z]+/g) || [];
+      const tokens = stripDiacritics(transcript).match(/[a-z]+/g) || [];
       const normalizeToken = (t: string) => {
         if (lang === "en") {
           if (/^(tea|tee)$/.test(t)) return "t";
@@ -167,194 +277,209 @@ export default function VisualAcuityTest() {
       return tokens.map(normalizeToken).join("");
     };
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognitionCtor() as SpeechRecognitionLike;
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = language === "pt" ? "pt-BR" : "en-US";
+    recognition.lang = languageRef.current === "pt" ? "pt-BR" : "en-US";
+    recognitionRef.current = recognition;
 
-    recognition.onresult = (event: any) => {
-      const currentTranscript = Array.from(event.results)
-        .map((result: any) => result[0].transcript)
-        .join(" ");
+    recognition.onresult = (event: unknown) => {
+      if (responseLockedRef.current) return;
+      if (testStateRef.current !== "showing") return;
 
-      console.log("🗣️ Raw Transcript Heard:", currentTranscript);
-
-      // If the transcript gets too long, restart the recognition to clear it
-      if (currentTranscript.length > 50) {
-        console.log("🧹 Transcript too long, clearing...");
-        try {
-          recognition.stop();
-          setSpokenText("");
-          return; // The onend handler will automatically restart it
-        } catch (e) {
-          console.error("Failed to stop for reset", e);
+      const results = (event as Partial<SpeechRecognitionEventLike>).results;
+      const parts: string[] = [];
+      if (results && typeof results.length === "number") {
+        for (let i = 0; i < results.length; i++) {
+          const alt = results[i]?.[0];
+          const t = typeof alt?.transcript === "string" ? alt.transcript : "";
+          if (t) parts.push(t);
         }
       }
+      const currentTranscript = parts.join(" ").trim();
+      if (!currentTranscript) return;
 
-      const expected = snellenLines[currentLine]?.text
-        ? snellenLines[currentLine].text.toLowerCase().replace(/\s+/g, "")
-        : null;
-      console.log("🎯 Expected Text:", expected);
-
-      // If expected is empty, we shouldn't process anything because the line hasn't loaded or we are transitioning
-      if (!expected) {
-        console.log("⏸️ Skipping match: expected text is empty or undefined");
+      if (currentTranscript.length > 60) {
+        setSpokenText("");
+        try {
+          recognition.abort?.();
+        } catch {
+          try {
+            recognition.stop();
+          } catch {
+            // ignore
+          }
+        }
         return;
       }
+
+      const lineIndex = currentLineRef.current;
+      const expectedRaw = snellenLinesRef.current[lineIndex]?.text ?? "";
+      const expected = expectedRaw.toLowerCase().replace(/\s+/g, "");
+      if (!expected) return;
 
       setSpokenText(currentTranscript);
 
       const normalizedTranscript = normalizeTranscriptInput(
         currentTranscript,
-        language === "pt" ? "pt" : "en",
+        languageRef.current === "pt" ? "pt" : "en",
       );
 
-      console.log("🔄 Normalized Transcript:", normalizedTranscript);
-
-      // We need to make sure we don't trigger a match if the expected text is empty (like during transitions)
-      if (
-        expected &&
-        expected.length > 0 &&
-        normalizedTranscript.includes(expected)
-      ) {
-        console.log("✅ Match! Advancing to next line.");
+      if (normalizedTranscript.includes(expected)) {
         if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
         playSuccessSound();
         handleResponse(true);
-      } else if (
-        normalizedTranscript.includes("blurry") ||
-        normalizedTranscript.includes("cantsee") ||
-        normalizedTranscript.includes("cannotsee") ||
-        normalizedTranscript.includes("stop") ||
-        normalizedTranscript.includes("embacado") || // embaçado (accents removed)
-        normalizedTranscript.includes("borrado") ||
-        normalizedTranscript.includes("naoconsigover") ||
-        normalizedTranscript.includes("naover") ||
-        normalizedTranscript.includes("pare")
-      ) {
-        console.log("🛑 User said blurry/stop. Ending this eye test.");
+        return;
+      }
+
+      const stopWords = [
+        "blurry",
+        "cantsee",
+        "cannotsee",
+        "stop",
+        "embacado",
+        "borrado",
+        "naoconsigover",
+        "naover",
+        "pare",
+      ];
+      if (stopWords.some((w) => normalizedTranscript.includes(w))) {
         if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
         handleResponse(false);
-      } else {
-        console.log("❌ No match yet. Keep trying.");
-        if (resetTimeoutRef.current) {
-          clearTimeout(resetTimeoutRef.current);
-        }
-        resetTimeoutRef.current = setTimeout(() => {
-          if (testState === "showing") {
-            console.log(
-              "⏱️ 2 seconds passed with no match. Resetting transcript.",
-            );
-            playErrorSound();
-            try {
-              recognition.stop();
-              setSpokenText("");
-            } catch (e) {
-              console.error(e);
-            }
-          }
-        }, 3000);
+        return;
       }
+
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = setTimeout(() => {
+        if (testStateRef.current !== "showing") return;
+        playErrorSound();
+        setSpokenText("");
+        try {
+          recognition.abort?.();
+        } catch {
+          try {
+            recognition.stop();
+          } catch {
+            // ignore
+          }
+        }
+      }, 3000);
     };
 
-    recognition.onerror = (event: any) => {
-      console.error("🎤 Speech Recognition Error:", event.error);
-      if (event.error === "network") {
+    recognition.onerror = (event: unknown) => {
+      const error =
+        typeof event === "object" && event && "error" in event
+          ? (event as { error?: unknown }).error
+          : undefined;
+      if (error === "network") {
         setSpeechErrorMsg(
           "Voice unavailable in this browser preview. Open in full Google Chrome.",
         );
         setIsListening(false);
-      } else if (
-        event.error === "not-allowed" ||
-        event.error === "service-not-allowed"
-      ) {
+        return;
+      }
+      if (error === "not-allowed" || error === "service-not-allowed") {
         setSpeechErrorMsg("Microphone access denied.");
         setIsListening(false);
       }
     };
 
-    let shouldRestart = true;
-
     recognition.onend = () => {
-      console.log(
-        "🎤 Speech Recognition Ended. Is listening supposed to be active?",
-        isListening,
-      );
-      // Automatically restart if we are still showing the test, didn't manually stop, and no terminal error
-      const hasExpected = !!snellenLines[currentLine]?.text;
-      if (
-        testState === "showing" &&
-        hasExpected &&
-        shouldRestart &&
-        !speechErrorMsg
-      ) {
-        try {
-          console.log("🔄 Restarting Speech Recognition...");
-          recognition.start();
-        } catch (e) {
-          console.error("Failed to restart speech recognition", e);
-        }
-      }
-    };
+      recognitionRunningRef.current = false;
+      setIsListening(false);
 
-    try {
-      if (!speechErrorMsg) {
-        console.log("🚀 Starting Speech Recognition...");
-        recognition.start();
-        setIsListening(true);
-      }
-    } catch (e) {
-      console.error("Speech recognition start error", e);
-    }
+      if (!shouldListenRef.current) return;
+      if (speechErrorMsgRef.current) return;
+
+      const lineIndex = currentLineRef.current;
+      const hasExpected = !!snellenLinesRef.current[lineIndex]?.text;
+      if (!hasExpected) return;
+
+      setTimeout(() => {
+        if (!shouldListenRef.current) return;
+        if (recognitionRunningRef.current) return;
+        try {
+          recognition.start();
+          recognitionRunningRef.current = true;
+          setIsListening(true);
+        } catch {
+          // ignore
+        }
+      }, 150);
+    };
 
     return () => {
-      shouldRestart = false;
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+      shouldListenRef.current = false;
+      recognitionRunningRef.current = false;
+      try {
+        recognition.abort?.();
+      } catch {
+        try {
+          recognition.stop();
+        } catch {
+          // ignore
+        }
+      }
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognitionRef.current = null;
+    };
+  }, [speechSupported, handleResponse]);
+
+  useEffect(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+    recognition.lang = language === "pt" ? "pt-BR" : "en-US";
+  }, [language]);
+
+  useEffect(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+
+    const shouldListen = testState === "showing" && !speechErrorMsg;
+    shouldListenRef.current = shouldListen;
+
+    if (!shouldListen) {
       if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
       try {
-        recognition.stop();
+        recognition.abort?.();
       } catch {
-        // ignore
+        try {
+          recognition.stop();
+        } catch {
+          // ignore
+        }
       }
-      setIsListening(false);
-      setSpokenText("");
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testState, currentLine, speechSupported, speechErrorMsg]);
-
-  const handleResponse = (canRead: boolean) => {
-    if (!canRead || currentLine === snellenLines.length - 1) {
-      const finalLine = canRead ? currentLine : Math.max(0, currentLine - 1);
-
-      const eye = isLeftEye ? "left" : "right";
-      const condition = isWithGlasses ? "with" : "without";
-      setAcuity(eye, condition, finalLine);
-
-      let nextStep: Step = "astigmatism";
-
-      if (currentStep === "acuity_left_without") {
-        nextStep = "acuity_right_without";
-      } else if (currentStep === "acuity_right_without") {
-        nextStep = wearsGlasses ? "acuity_left_with" : "astigmatism";
-      } else if (currentStep === "acuity_left_with") {
-        nextStep = "acuity_right_with";
-      } else if (currentStep === "acuity_right_with") {
-        nextStep = "astigmatism";
-      }
-
-      setStep(nextStep);
-      setCurrentLine(0);
-      setTestState("hidden"); // Reset for next eye/condition
-    } else {
-      setCurrentLine((prev) => prev + 1);
+      recognitionRunningRef.current = false;
+      setTimeout(() => {
+        setIsListening(false);
+        setSpokenText("");
+      }, 0);
+      return;
     }
-  };
+
+    if (recognitionRunningRef.current) return;
+    try {
+      recognition.start();
+      recognitionRunningRef.current = true;
+      setTimeout(() => setIsListening(true), 0);
+    } catch {
+      // ignore
+    }
+  }, [testState, speechErrorMsg]);
 
   const startTest = () => {
     // Initialize audio context on user interaction
-    const Context = window.AudioContext || (window as any).webkitAudioContext;
+    const Context = getAudioContextCtor();
     if (Context && !globalAudioCtx) {
       globalAudioCtx = new Context();
     }
+    setSnellenLines(generateRandomLines());
+    setCurrentLine(0);
+    setSpokenText("");
+    responseLockedRef.current = false;
     setCountdown(10);
     setTestState("countdown");
   };

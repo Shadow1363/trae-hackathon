@@ -44,7 +44,7 @@ export default function AgeVisionChart({
       y: {
         beginAtZero: true,
         max: 100,
-        ticks: { callback: (v: any) => `${v}%` },
+        ticks: { callback: (v: string | number) => `${v}%` },
       },
       x: { grid: { display: false } },
     },
