@@ -1,5 +1,8 @@
 # Eyes Check
 
+![WhatsApp Image 2026-03-22 at 12 35 09](https://github.com/user-attachments/assets/32615de8-c950-47b9-9b61-0c38896fc051)
+
+
 AI-powered vision screening built with Next.js.
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
